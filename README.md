@@ -11,7 +11,7 @@ This document provides a detailed implementation plan for the Ansible + Streamli
 * **Python & Virtual Environment:** Python 3 with `venv`
 * **Streamlit:** 1.54.0 running in a Python virtual environment
 * **LLM Model:** Ollama `phi3:mini`
-* **Managed Hosts (Simulated):** 2 VMs, Debian 12, Standard_D2s_v3
+* **Managed Hosts:** 2 VMs, Debian 12, Standard_D2s_v3
 
 Ansible controller connects via SSH to the managed hosts to check connectivity using the `connection_validator.yml` playbook. Streamlit provides a web interface to prompt Ollama to generate CSV reports of failed hosts automatically.
 
