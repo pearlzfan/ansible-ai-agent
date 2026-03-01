@@ -85,30 +85,53 @@ File: `~/ansible/connection_validator.yml`
 
 ```yaml
 ---
-- name: Connection Validator — real hosts
-  hosts: linux
-  gather_facts: yes
-  tasks:
-    - name: Initialize results list on localhost
-      set_fact:
-        connectivity_results: []
-      delegate_to: localhost
+- name: Connection Validator — all hosts
+  hosts: localhost
+  gather_facts: no
+  vars:
+    target_group: linux
+    run_timestamp: "{{ lookup('pipe','date +%Y%m%d_%H%M%S') }}"
 
-    - name: Append host info to results
+  tasks:
+
+    - name: Ensure raw_runs directory exists
+      file:
+        path: "{{ playbook_dir }}/../artifacts/raw_runs"
+        state: directory
+        mode: '0755'
+
+    - name: Initialize results list
       set_fact:
-        connectivity_results: "{{ connectivity_results + [ {
-          'hostname': inventory_hostname,
-          'default_ipv4': ansible_default_ipv4.address | default('unknown'),
-          'distribution': ansible_distribution | default('unknown'),
-          'os_family': ansible_os_family | default('unknown'),
-          'connectivity_success': (ansible_facts is defined) }} ] }}"
-      delegate_to: localhost
+        all_results: []
+
+    - name: Ping each host and append result
+      ansible.builtin.ping:
+      delegate_to: "{{ item }}"
+      register: ping_result
+      ignore_unreachable: yes
+      ignore_errors: yes
+      loop: "{{ groups[target_group] }}"
+      loop_control:
+        loop_var: item
+
+    - name: Append ping results to all_results
+      set_fact:
+        all_results: "{{ all_results + [{
+          'hostname': item.item,
+          'default_ipv4': hostvars[item.item].ansible_host | default('unknown'),
+          'os_family': hostvars[item.item].ansible_os_family | default('unknown'),
+          'distribution': hostvars[item.item].ansible_distribution | default('unknown'),
+          'connectivity_success': (item.ping is defined and item.ping == 'pong'),
+          'connectivity_output': (item.ping if item.ping is defined and item.ping == 'pong' else 'Host unreachable or SSH failure')
+        }] }}"
+      loop: "{{ ping_result.results }}"
+      loop_control:
+        loop_var: item
 
     - name: Write JSON artifact
       copy:
-        content: "{{ connectivity_results | to_nice_json }}"
-        dest: "/home/pearlzfan/artifacts/raw_runs/connection_validator_{{ ansible_date_time.iso8601_basic }}.json"
-      delegate_to: localhost
+        content: "{{ all_results | to_nice_json }}"
+        dest: "{{ playbook_dir }}/../artifacts/raw_runs/connection_validator_{{ run_timestamp }}.json"
 ```
 
 ---
@@ -165,50 +188,105 @@ ollama list  # to confirm model is downloaded
 import streamlit as st
 import json
 import os
-import pandas as pd
 import subprocess
+from datetime import datetime
+import csv
 
-ARTIFACTS_DIR = "/home/pearlzfan/artifacts/raw_runs"
-MODEL_NAME = "phi3:mini"
+# -------------------------
+# CONFIG
+# -------------------------
+ARTIFACTS_DIR = "/home/pearlzfan/artifacts/raw_runs"  # path to your JSON files
+OLLAMA_MODEL = "phi3:mini"  # small model for Streamlit
+TIMEOUT_SEC = 30  # timeout for Ollama
 
-st.title("Ansible Connection Validator AI Report")
+# -------------------------
+# STREAMLIT INTERFACE
+# -------------------------
+st.title("Ansible Connection Validator Report via Ollama")
 
-# List JSON artifacts
-json_files = sorted([f for f in os.listdir(ARTIFACTS_DIR) if f.endswith('.json')], reverse=True)
+st.markdown("""
+This app allows you to prompt Ollama to generate a CSV report for hosts that failed the
+connection validator playbook.
+""")
+
+# Prompt input
+user_prompt = st.text_area("Prompt Ollama:", "Prepare CSV report of hosts that failed connection validator playbook.")
+
+# -------------------------
+# FIND JSON ARTIFACT
+# -------------------------
+json_files = sorted(
+    [f for f in os.listdir(ARTIFACTS_DIR) if f.endswith(".json")],
+    reverse=True
+)
 
 if not json_files:
     st.warning("No JSON artifacts found. Run connection_validator.yml first.")
-else:
-    selected_file = st.selectbox("Select JSON artifact", json_files)
+    st.stop()
 
-    user_prompt = st.text_area("Prompt for Ollama", "Prepare CSV report of hosts that failed connection validator playbook")
+json_path = os.path.join(ARTIFACTS_DIR, json_files[0])
+st.info(f"Using artifact: {json_files[0]}")
 
-    if st.button("Generate CSV"):
-        artifact_path = os.path.join(ARTIFACTS_DIR, selected_file)
-        with open(artifact_path, 'r') as f:
-            json_data = f.read()
+# -------------------------
+# LOAD JSON
+# -------------------------
+with open(json_path, "r") as f:
+    hosts_json = json.load(f)
 
-        full_prompt = f"{user_prompt}\nHere is the JSON data:\n{json_data}"
+# -------------------------
+# FILTER FAILED HOSTS
+# -------------------------
+failed_hosts = [h for h in hosts_json if not h.get("connectivity_success", True)]
 
-        try:
-            result = subprocess.run(
-                ["ollama", "run", MODEL_NAME],
-                input=full_prompt.encode('utf-8'),
-                capture_output=True,
-                check=True
-            )
-            csv_output = result.stdout.decode('utf-8')
+if not failed_hosts:
+    st.success("All hosts passed connectivity. No failed hosts to report.")
+    st.stop()
 
+# -------------------------
+# PREPARE INPUT FOR OLLAMA
+# -------------------------
+ollama_input = "\n".join(
+    f"{h['hostname']} ({h['default_ipv4']}) - {h.get('error_message', '')}"
+    for h in failed_hosts
+)
+
+final_prompt = f"{user_prompt}\n\n{ollama_input}"
+
+# -------------------------
+# GENERATE CSV BUTTON
+# -------------------------
+if st.button("Generate CSV via Ollama"):
+    try:
+        result = subprocess.run(
+            ["ollama", "run", OLLAMA_MODEL],
+            input=final_prompt.encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=TIMEOUT_SEC
+        )
+
+        stdout = result.stdout.decode("utf-8").strip()
+        stderr = result.stderr.decode("utf-8").strip()
+
+        if result.returncode != 0:
+            st.error(f"Ollama error:\n{stderr}")
+        else:
             # Save CSV
-            csv_file = f"connection_validator_report_{selected_file.replace('.json','.csv')}"
-            with open(csv_file, 'w') as f:
-                f.write(csv_output)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_filename = f"connection_validator_report_{timestamp}.csv"
 
-            st.success(f"Report written to {csv_file}")
-            st.download_button("Download CSV", csv_output, file_name=csv_file, mime='text/csv')
+            # Write CSV from Ollama output (assuming Ollama returns CSV-compatible text)
+            csv_path = os.path.join(os.getcwd(), csv_filename)
+            with open(csv_path, "w", newline="") as f:
+                f.write(stdout)
 
-        except subprocess.CalledProcessError as e:
-            st.error(f"Ollama error: {e.stderr.decode('utf-8')}")
+            st.success(f"Report written to {csv_filename}")
+            st.code(stdout)  # show CSV content
+
+    except subprocess.TimeoutExpired:
+        st.error(f"Ollama timed out after {TIMEOUT_SEC} seconds.")
+    except Exception as e:
+        st.error(f"Unexpected error: {e}")
 ```
 
 ---
