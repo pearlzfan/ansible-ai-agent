@@ -329,8 +329,8 @@ source venv/bin/activate
 streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 ```
 
-3. Open Streamlit URL in browser: `http://<controller_ip>:8501`
-4. Select JSON artifact and enter prompt, e.g., "Prepare CSV report of hosts that failed connection validator playbook"
+3. Open Streamlit URL in browser: `http://20.123.9.43:8501`
+4. latest JSON artifact is selected automatically, enter prompt, e.g., "Prepare CSV report of hosts that failed connection validator playbook"
 5. Click "Generate CSV" and download the report
 
 This setup allows users to prompt Ollama from a web interface to automatically generate CSV reports based on Ansible connectivity results without manual file handling.
