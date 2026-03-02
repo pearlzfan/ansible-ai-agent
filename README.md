@@ -192,29 +192,51 @@ import subprocess
 from datetime import datetime
 import csv
 
-# -------------------------
-# CONFIG
-# -------------------------
-ARTIFACTS_DIR = "/home/pearlzfan/artifacts/raw_runs"  # path to your JSON files
-OLLAMA_MODEL = "phi3:mini"  # small model for Streamlit
-TIMEOUT_SEC = 30  # timeout for Ollama
+# =====================================================
+# CONFIGURATION
+# =====================================================
 
-# -------------------------
-# STREAMLIT INTERFACE
-# -------------------------
-st.title("Ansible Connection Validator Report via Ollama")
+ARTIFACTS_DIR = "/home/pearlzfan/artifacts/raw_runs"
+OLLAMA_MODEL = "phi3:mini"
+OLLAMA_TIMEOUT = 120
 
-st.markdown("""
-This app allows you to prompt Ollama to generate a CSV report for hosts that failed the
-connection validator playbook.
-""")
+# =====================================================
+# PRE-WARM OLLAMA MODEL
+# =====================================================
 
-# Prompt input
-user_prompt = st.text_area("Prompt Ollama:", "Prepare CSV report of hosts that failed connection validator playbook.")
+try:
+    subprocess.run(
+        ["ollama", "pull", OLLAMA_MODEL],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+except Exception:
+    pass
 
-# -------------------------
-# FIND JSON ARTIFACT
-# -------------------------
+# =====================================================
+# STREAMLIT UI
+# =====================================================
+
+st.set_page_config(page_title="Ansible AI Agent", layout="wide")
+st.title("Ansible AI Agent – Connection Failure Analysis")
+
+# =====================================================
+# CUSTOM USER PROMPT FIELD
+# =====================================================
+
+user_prompt = st.text_area(
+    "Optional: Add custom instructions for AI analysis",
+    placeholder="Example: Provide concise enterprise-grade remediation steps."
+)
+
+# =====================================================
+# LOAD LATEST JSON ARTIFACT
+# =====================================================
+
+if not os.path.exists(ARTIFACTS_DIR):
+    st.error("Artifacts directory not found.")
+    st.stop()
+
 json_files = sorted(
     [f for f in os.listdir(ARTIFACTS_DIR) if f.endswith(".json")],
     reverse=True
@@ -224,69 +246,182 @@ if not json_files:
     st.warning("No JSON artifacts found. Run connection_validator.yml first.")
     st.stop()
 
-json_path = os.path.join(ARTIFACTS_DIR, json_files[0])
-st.info(f"Using artifact: {json_files[0]}")
+latest_file = json_files[0]
+json_path = os.path.join(ARTIFACTS_DIR, latest_file)
 
-# -------------------------
-# LOAD JSON
-# -------------------------
+st.info(f"Using artifact: {latest_file}")
+
 with open(json_path, "r") as f:
-    hosts_json = json.load(f)
+    hosts_data = json.load(f)
 
-# -------------------------
+# =====================================================
 # FILTER FAILED HOSTS
-# -------------------------
-failed_hosts = [h for h in hosts_json if not h.get("connectivity_success", True)]
+# =====================================================
+
+failed_hosts = [
+    h for h in hosts_data
+    if not h.get("connectivity_success", True)
+]
 
 if not failed_hosts:
-    st.success("All hosts passed connectivity. No failed hosts to report.")
+    st.success("All hosts passed connectivity validation.")
     st.stop()
 
-# -------------------------
-# PREPARE INPUT FOR OLLAMA
-# -------------------------
-ollama_input = "\n".join(
-    f"{h['hostname']} ({h['default_ipv4']}) - {h.get('error_message', '')}"
-    for h in failed_hosts
-)
+st.write(f"Detected {len(failed_hosts)} failed host(s).")
 
-final_prompt = f"{user_prompt}\n\n{ollama_input}"
+# =====================================================
+# LLM ANALYSIS FUNCTION (IMPROVED)
+# =====================================================
 
-# -------------------------
-# GENERATE CSV BUTTON
-# -------------------------
-if st.button("Generate CSV via Ollama"):
+def analyze_host_with_llm(host, custom_instruction):
+
+    base_instruction = """
+You are a senior infrastructure automation engineer.
+
+You MUST respond EXACTLY in this format:
+
+Root Cause: <one short sentence>
+Suggested Fix: <clear remediation steps>
+
+Do NOT add explanations before or after.
+"""
+
+    instruction_block = (
+        f"\nAdditional User Instructions:\n{custom_instruction}\n"
+        if custom_instruction.strip()
+        else ""
+    )
+
+    prompt = f"""
+{base_instruction}
+{instruction_block}
+
+Host: {host.get('hostname')}
+IP: {host.get('default_ipv4')}
+Distribution: {host.get('distribution', 'unknown')}
+OS Family: {host.get('os_family', 'unknown')}
+Connectivity Success: {host.get('connectivity_success')}
+"""
+
     try:
         result = subprocess.run(
             ["ollama", "run", OLLAMA_MODEL],
-            input=final_prompt.encode("utf-8"),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=TIMEOUT_SEC
+            input=prompt,
+            text=True,
+            capture_output=True,
+            timeout=OLLAMA_TIMEOUT
         )
 
-        stdout = result.stdout.decode("utf-8").strip()
-        stderr = result.stderr.decode("utf-8").strip()
-
         if result.returncode != 0:
-            st.error(f"Ollama error:\n{stderr}")
-        else:
-            # Save CSV
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            csv_filename = f"connection_validator_report_{timestamp}.csv"
+            return (
+                "LLM execution error",
+                result.stderr.strip() or "Model returned non-zero exit code"
+            )
 
-            # Write CSV from Ollama output (assuming Ollama returns CSV-compatible text)
-            csv_path = os.path.join(os.getcwd(), csv_filename)
-            with open(csv_path, "w", newline="") as f:
-                f.write(stdout)
+        output = result.stdout.strip()
 
-            st.success(f"Report written to {csv_filename}")
-            st.code(stdout)  # show CSV content
+        if not output:
+            return (
+                "Empty LLM response",
+                "Model returned no content"
+            )
+
+        # -------------------------------
+        # STRICT FORMAT PARSING
+        # -------------------------------
+        root_cause = None
+        suggested_fix = None
+
+        for line in output.splitlines():
+            line = line.strip()
+
+            if line.lower().startswith("root cause"):
+                root_cause = line.split(":", 1)[1].strip()
+
+            elif line.lower().startswith("suggested fix"):
+                suggested_fix = line.split(":", 1)[1].strip()
+
+        # -------------------------------
+        # FALLBACK SMART PARSING
+        # -------------------------------
+        if not root_cause or not suggested_fix:
+
+            lines = [l.strip() for l in output.splitlines() if l.strip()]
+
+            if len(lines) >= 2:
+                root_cause = lines[0]
+                suggested_fix = lines[1]
+            else:
+                root_cause = output[:200]
+                suggested_fix = "Manual review required"
+
+        return root_cause, suggested_fix
 
     except subprocess.TimeoutExpired:
-        st.error(f"Ollama timed out after {TIMEOUT_SEC} seconds.")
+        return (
+            "Model response timeout",
+            "Increase timeout or verify Ollama performance"
+        )
+
     except Exception as e:
-        st.error(f"Unexpected error: {e}")
+        return (
+            "Unexpected LLM error",
+            str(e)
+        )
+
+# =====================================================
+# GENERATE CSV REPORT
+# =====================================================
+
+if st.button("Generate AI CSV Report"):
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    report_rows = []
+
+    with st.spinner("Analyzing failures with AI model..."):
+
+        for host in failed_hosts:
+
+            root_cause, suggested_fix = analyze_host_with_llm(
+                host,
+                user_prompt
+            )
+
+            report_rows.append([
+                host.get("hostname"),
+                host.get("default_ipv4"),
+                "Connection Validation Failed",
+                timestamp,
+                root_cause,
+                suggested_fix
+            ])
+
+    csv_filename = f"ai_connection_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    csv_path = os.path.join(os.getcwd(), csv_filename)
+
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "Host",
+            "IP Address",
+            "Reason for Failure",
+            "Time Detected",
+            "Root Cause Analysis",
+            "Suggested Fix"
+        ])
+        writer.writerows(report_rows)
+
+    st.success(f"Report generated: {csv_filename}")
+
+    st.dataframe(report_rows)
+
+    with open(csv_path, "rb") as f:
+        st.download_button(
+            label="Download CSV Report",
+            data=f,
+            file_name=csv_filename,
+            mime="text/csv"
+        )
 ```
 
 ---
