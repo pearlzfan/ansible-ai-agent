@@ -460,7 +460,7 @@ flowchart TD
 
     B -->|Step 2: Run server name playbook| F[Filter online hosts from connection_validator JSON]
     F --> G[Ansible Controller]
-    G -->|Run check_server_name.yml| H[Managed Hosts (Linux VMs)]
+    G -->|Run check_server_name.yml| H[Managed Hosts]
     H -->|Return results| G
     G --> B
 
