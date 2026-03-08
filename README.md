@@ -1,16 +1,25 @@
-Ansible AI Agent Demo – Enhanced Version
+# Ansible AI Agent Demo – Enhanced Version
 
-This repository demonstrates an enhanced Ansible AI Agent using Ansible, Streamlit, and Ollama LLM to automate infrastructure analysis, playbook execution, and CSV reporting.
+This repository demonstrates an enhanced **Ansible AI Agent** using **Ansible**, **Streamlit**, and **Ollama LLM** to automate infrastructure analysis, playbook execution, and CSV reporting.
 
-Architecture Overview
-Component	Description
-Ansible Controller VM	Azure Linux VM (Ubuntu 24.04, Standard_E2s_v4, 2 vCPU, 16 GB RAM). Hosts Ansible, Python, Streamlit, and Ollama.
-Ansible Version	Core 2.16.3
-Python & venv	Isolated Python virtual environment for dependencies
-Streamlit	Version 1.54.0, provides web interface for user prompts and CSV reports
-LLM Model	Ollama phi3:mini for AI analysis of failed hosts
-Managed Hosts	2 Azure VMs (Debian 12, Standard_D2s_v3), accessed via SSH by Ansible
-Folder Structure
+---
+
+## Architecture Overview
+
+| Component | Description |
+|-----------|------------|
+| **Ansible Controller VM** | Azure Linux VM (Ubuntu 24.04, Standard_E2s_v4, 2 vCPU, 16 GB RAM). Hosts Ansible, Python, Streamlit, and Ollama. |
+| **Ansible Version** | Core 2.16.3 |
+| **Python & venv** | Isolated Python virtual environment for dependencies |
+| **Streamlit** | Version 1.54.0, provides web interface for user prompts and CSV reports |
+| **LLM Model** | Ollama `phi3:mini` for AI analysis of failed hosts |
+| **Managed Hosts** | 2 Azure VMs (Debian 12, Standard_D2s_v3), accessed via SSH by Ansible |
+
+---
+
+## Folder Structure
+
+```text
 /home/pearlzfan/
 ├── ansible/
 │   ├── connection_validator.yml
@@ -21,10 +30,11 @@ Folder Structure
 │   └── venv/
 ├── artifacts/
 │   └── raw_runs/
-
+```
 artifacts/raw_runs contains standardized JSON outputs for both playbooks.
 
 System Preparation
+
 # Update system
 sudo apt update && sudo apt upgrade -y
 
@@ -40,7 +50,9 @@ ssh-keygen -t rsa -b 4096 -f ~/ansible-controller_key.pem
 chmod 600 ~/ansible-controller_key.pem
 ssh-copy-id -i ~/ansible-controller_key.pem pearlzfan@10.0.0.7
 ssh-copy-id -i ~/ansible-controller_key.pem pearlzfan@10.0.0.8
+
 Ansible Inventory (inventory.ini)
+
 [linux]
 host-vm1 ansible_host=10.0.0.7
 host-vm2 ansible_host=10.0.0.8
@@ -48,7 +60,9 @@ host-vm2 ansible_host=10.0.0.8
 [all:vars]
 ansible_user=pearlzfan
 ansible_ssh_private_key_file=/home/pearlzfan/ansible-controller_key.pem
+
 Connection Validator Playbook (connection_validator.yml)
+
 ---
 - name: Connection Validator — all hosts
   hosts: localhost
@@ -96,7 +110,10 @@ Connection Validator Playbook (connection_validator.yml)
       copy:
         content: "{{ all_results | to_nice_json }}"
         dest: "{{ playbook_dir }}/../artifacts/raw_runs/connection_validator_{{ run_timestamp }}.json"
+
+
 Server Name Playbook (check_server_name.yml)
+
 ---
 - name: Check Server Hostname
   hosts: linux
@@ -135,7 +152,11 @@ Server Name Playbook (check_server_name.yml)
       copy:
         content: "{{ all_results | to_nice_json }}"
         dest: "{{ playbook_dir }}/../artifacts/raw_runs/check_server_name_{{ run_timestamp }}.json"
+
+
 Streamlit App (app.py)
+
+```text
 import streamlit as st
 import json
 import os
@@ -386,6 +407,10 @@ if run_agent:
 
     else:
         st.warning("Instruction not recognized. Use one of the three steps: generate failed connection CSV, run server name playbook, or generate successful server name CSV.")
+```
+
+
+
 Usage Workflow
 
 Run connection validator playbook:
@@ -406,8 +431,4 @@ Generate CSV report for successful server name checks:
 
 Prompt: Prepare CSV report of successful server name check playbook
 
-CSV contains actual server names obtained from hosts
-
-
-    style E fill:#dfd,stroke:#333,stroke-width:2px
-    style E2 fill:#dfd,stroke:#333,stroke-width:2px
+CSV includes actual server names obtained from hosts
