@@ -465,7 +465,7 @@ flowchart TD
     G --> B
 
     B -->|Step 3: Prepare CSV of successful server name check| I[Load check_server_name JSON]
-    I --> E2[Generate factual CSV ((hostname, status, server name))]
+    I --> E2[Generate factual CSV]
     E2 --> B
 
     style A fill:#f9f,stroke:#333,stroke-width:2px
