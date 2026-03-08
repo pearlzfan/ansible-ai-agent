@@ -449,6 +449,7 @@ Prepare CSV report of successful server name check playbook
 CSV includes actual server names obtained from hosts
 
 
+```mermaid
 flowchart TD
     A[User] -->|Enter prompt in Streamlit| B[Streamlit Web UI]
 
@@ -477,3 +478,4 @@ flowchart TD
     style I fill:#ffd,stroke:#333,stroke-width:2px
     style E fill:#dfd,stroke:#333,stroke-width:2px
     style E2 fill:#dfd,stroke:#333,stroke-width:2px
+```
