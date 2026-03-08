@@ -55,7 +55,7 @@ chmod 600 ~/ansible-controller_key.pem
 ssh-copy-id -i ~/ansible-controller_key.pem pearlzfan@10.0.0.7
 ssh-copy-id -i ~/ansible-controller_key.pem pearlzfan@10.0.0.8
 ```
-Ansible Inventory (inventory.ini)
+# Ansible Inventory (inventory.ini)
 ```ini
 [linux]
 host-vm1 ansible_host=10.0.0.7
@@ -65,7 +65,7 @@ host-vm2 ansible_host=10.0.0.8
 ansible_user=pearlzfan
 ansible_ssh_private_key_file=/home/pearlzfan/ansible-controller_key.pem
 ```
-Connection Validator Playbook (connection_validator.yml)
+# Connection Validator Playbook (connection_validator.yml)
 
 ```yaml
 ---
@@ -117,7 +117,7 @@ Connection Validator Playbook (connection_validator.yml)
         dest: "{{ playbook_dir }}/../artifacts/raw_runs/connection_validator_{{ run_timestamp }}.json"
 ```
 
-Server Name Playbook (check_server_name.yml)
+# Server Name Playbook (check_server_name.yml)
 
 ```yaml
 ---
@@ -160,7 +160,7 @@ Server Name Playbook (check_server_name.yml)
         dest: "{{ playbook_dir }}/../artifacts/raw_runs/check_server_name_{{ run_timestamp }}.json"
 ```
 
-Streamlit App (app.py)
+# Streamlit App (app.py)
 
 ```python
 import streamlit as st
@@ -417,24 +417,33 @@ if run_agent:
 
 
 
-Usage Workflow
+# Usage Workflow
 
 Run connection validator playbook:
 
+```bash
 ansible-playbook -i ~/ansible/inventory.ini ~/ansible/connection_validator.yml
-
+```
 Generate CSV report for failed hosts:
 
 Open Streamlit
 
-Prompt: Prepare CSV report of hosts that failed connection validator playbook
+Prompt: 
+```text
+Prepare CSV report of hosts that failed connection validator playbook
+```
 
 Run server name playbook on online hosts:
 
-Prompt: Run server name playbook on online hosts
+Prompt: 
+```text
+Run server name playbook on online hosts
+```
 
 Generate CSV report for successful server name checks:
 
-Prompt: Prepare CSV report of successful server name check playbook
-
+Prompt: 
+```text
+Prepare CSV report of successful server name check playbook
+```
 CSV includes actual server names obtained from hosts
