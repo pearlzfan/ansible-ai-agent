@@ -409,32 +409,5 @@ Prompt: Prepare CSV report of successful server name check playbook
 CSV contains actual server names obtained from hosts
 
 
-
-flowchart TD
-    A[User] -->|Enter prompt in Streamlit| B[Streamlit Web UI]
-
-    B -->|Step 1: Analyze failed hosts| C[Load connection_validator JSON]
-    C --> D[LLM via Ollama]
-    D -->|Root cause & suggested fix| B
-    D --> E[Generate CSV of failed hosts]
-
-    B -->|Step 2: Run server name playbook| F[Filter online hosts from connection_validator JSON]
-    F --> G[Ansible Controller]
-    G -->|Run check_server_name.yml| H[Managed Hosts (Linux VMs)]
-    H -->|Return results| G
-    G --> B
-
-    B -->|Step 3: Prepare CSV of successful server name check| I[Load check_server_name JSON]
-    I --> E2[Generate factual CSV (hostname, status, server name)]
-    E2 --> B
-
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#bbf,stroke:#333,stroke-width:2px
-    style C fill:#bfb,stroke:#333,stroke-width:2px
-    style D fill:#ffb,stroke:#333,stroke-width:2px
-    style F fill:#bff,stroke:#333,stroke-width:2px
-    style G fill:#fbf,stroke:#333,stroke-width:2px
-    style H fill:#fbb,stroke:#333,stroke-width:2px
-    style I fill:#ffd,stroke:#333,stroke-width:2px
     style E fill:#dfd,stroke:#333,stroke-width:2px
     style E2 fill:#dfd,stroke:#333,stroke-width:2px
