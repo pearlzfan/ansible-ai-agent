@@ -36,23 +36,27 @@ artifacts/raw_runs contains standardized JSON outputs for both playbooks.
 System Preparation
 
 # Update system
+```bash
 sudo apt update && sudo apt upgrade -y
-
+```
 # Install Python and dependencies
+```bash
 sudo apt install -y python3 python3-venv python3-distutils python3-pip
 python3 -m pip install --upgrade pip
-
+```
 # Install Ansible Core
+```bash
 python3 -m pip install --user ansible-core==2.16.3
-
+```
 # Setup SSH keys for managed hosts
+```bash
 ssh-keygen -t rsa -b 4096 -f ~/ansible-controller_key.pem
 chmod 600 ~/ansible-controller_key.pem
 ssh-copy-id -i ~/ansible-controller_key.pem pearlzfan@10.0.0.7
 ssh-copy-id -i ~/ansible-controller_key.pem pearlzfan@10.0.0.8
-
+```
 Ansible Inventory (inventory.ini)
-
+```ini
 [linux]
 host-vm1 ansible_host=10.0.0.7
 host-vm2 ansible_host=10.0.0.8
@@ -60,9 +64,10 @@ host-vm2 ansible_host=10.0.0.8
 [all:vars]
 ansible_user=pearlzfan
 ansible_ssh_private_key_file=/home/pearlzfan/ansible-controller_key.pem
-
+```
 Connection Validator Playbook (connection_validator.yml)
 
+```yaml
 ---
 - name: Connection Validator — all hosts
   hosts: localhost
@@ -110,10 +115,11 @@ Connection Validator Playbook (connection_validator.yml)
       copy:
         content: "{{ all_results | to_nice_json }}"
         dest: "{{ playbook_dir }}/../artifacts/raw_runs/connection_validator_{{ run_timestamp }}.json"
-
+```
 
 Server Name Playbook (check_server_name.yml)
 
+```yaml
 ---
 - name: Check Server Hostname
   hosts: linux
@@ -152,11 +158,11 @@ Server Name Playbook (check_server_name.yml)
       copy:
         content: "{{ all_results | to_nice_json }}"
         dest: "{{ playbook_dir }}/../artifacts/raw_runs/check_server_name_{{ run_timestamp }}.json"
-
+```
 
 Streamlit App (app.py)
 
-```text
+```python
 import streamlit as st
 import json
 import os
