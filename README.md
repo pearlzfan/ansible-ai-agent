@@ -374,3 +374,27 @@ ansible-playbook -i ~/ansible/inventory.ini ~/ansible/connection_validator.yml
 * Enter prompt: `Prepare CSV report of successful server name check playbook`
 
 CSV includes actual server names obtained from hosts.
+
+```mermaid
+flowchart TD
+    A[Start: User opens Streamlit] --> B[Enter instruction for AI Agent]
+    B --> C{Detect intent using Ollama LLM}
+    
+    C -->|FAILED_HOSTS_REPORT| D[Run connection_validator.yml playbook]
+    D --> E[Collect JSON artifact of host connectivity]
+    E --> F[Identify failed hosts]
+    F --> G[Analyze failed hosts with Ollama LLM]
+    G --> H[Generate CSV report for failed hosts]
+    H --> I[Display report & Download CSV]
+    
+    C -->|RUN_HOSTNAME_CHECK| J[Run check_server_name.yml playbook]
+    J --> K[Collect JSON artifact of hostnames]
+    K --> L[Generate CSV report for hostname comparison]
+    L --> M[Display report & Download CSV]
+    
+    C -->|UNKNOWN| N[Show warning: AI could not determine action]
+
+    I --> O[End]
+    M --> O
+    N --> O
+```
